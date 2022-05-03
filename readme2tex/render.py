@@ -59,10 +59,8 @@ def extract_equations(content):
     lines = [line for line in content.splitlines()]
     while True:
         dollar, begin = next(cursor)
-        if dollar is -1: dollar = '-1'
-        if begin is -1: begin = '-1'
-        if dollar == '-1' and begin == '-1': break
-        if dollar != '-1' and (begin == '-1' or dollar < begin):
+        if dollar == -1 and begin == -1: break
+        if dollar != -1 and (begin == -1 or dollar < begin):
             # found a $, see if it's $$
             if dollar > 0 and content[dollar - 1] == '\\':
                 cursor = dollar + 1
@@ -106,7 +104,7 @@ def extract_equations(content):
                 continue
             end_marker = '\\end' + match.group()
             end = content.find(end_marker, begin)
-            if end is -1:
+            if end == -1:
                 cursor = begin + 6
                 continue
             cursor = end + len(end_marker)
@@ -176,10 +174,10 @@ def render(
 
         xml = (ET.fromstring(svg))
         attributes = xml.attrib
-        gfill = xml.find('{https://www.w3.org/2000/svg}g')
+        gfill = xml.find('{http://www.w3.org/2000/svg}g')
         gfill.set('fill-opacity', '0.9')
         if not block:
-            uses = gfill.findall('{https://www.w3.org/2000/svg}use')
+            uses = gfill.findall('{http://www.w3.org/2000/svg}use')
             use = uses[0]
             # compute baseline off of this dummy element
             x = use.attrib['x']
@@ -221,12 +219,14 @@ def render(
         equation_map[(start, end)] = (svg, name, dvi, baseline_offset)
 
     # git rev-parse --abbrev-ref HEAD
-    try:
-        old_branch = check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD']).decode('utf-8').strip()
-    except:
-        if not nocdn:
-            logging.error("Not in a git repository, please enable --nocdn")
-        return exit(1)
+    old_branch = "NONE"
+    if branch:
+        try:
+            old_branch = check_output(['git', 'rev-parse', '--abbrev-ref', 'HEAD']).decode('utf-8').strip()
+        except:
+            if not nocdn:
+                logging.error("Not in a git repository, please enable --nocdn")
+            return exit(1)
 
     if has_changes:
         if not branch or branch == old_branch:
