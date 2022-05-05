@@ -31,7 +31,7 @@ def rendertex(engine, string, packages, temp_dir, block):
     source = envelope % ('\n'.join(r'\usepackage{%s}' % ''.join(package) for package in packages), 'a' if not block else '', string)
     name = hashlib.md5(string.encode('utf-8')).hexdigest()
     source_file = os.path.join(temp_dir, name + '.tex')
-    with open(source_file, 'w') as file:
+    with open(source_file, 'w', encoding = 'utf-8') as file:
         file.write(source)
 
     try:
@@ -54,61 +54,34 @@ def svg2png(svg):
 
 
 def extract_equations(content):
-    next = lambda n: (content.find('$', n), content.find(r'\begin', n))
-    cursor = 0
-    lines = [line for line in content.splitlines()]
+    contentInd = 0
     while True:
-        dollar, begin = next(cursor)
-        if dollar == -1 and begin == -1: break
-        if dollar != -1 and (begin == -1 or dollar < begin):
-            # found a $, see if it's $$
-            if dollar > 0 and content[dollar - 1] == '\\':
-                cursor = dollar + 1
-                continue
-            # get this line
-            cummulative = 0
-            line = 0
-            for line, string in enumerate(lines):
-                cummulative += len(string) + 1
-                if dollar < cummulative: break
-            if lines[line].startswith('   '):
-                cursor = dollar + 2
-                continue
-            if len(content) > dollar and content[dollar + 1] == '$':
-                ## find the next $$
-                cursor = content.find('$$', dollar + 2) + 2
-                if cursor == 1:
-                    cursor = dollar + 1
-                    continue
-                yield content[dollar: cursor], dollar, cursor, True
-            else:
-                cursor = content.find('$', dollar + 1) + 1
-                if cursor == 0:
-                    cursor = dollar + 1
-                    continue
-                yield content[dollar: cursor], dollar, cursor, False
+        if(contentInd >= len(content) - 1):
+            break
+
+        startPattern = r'\\begin\{([\w*]+)\}'
+        startMatch = re.search(startPattern, content[contentInd:])
+        if(not startMatch):
+            break
+        
+        environment = startMatch.group(1)
+
+        endPattern = r'\\end\{' + re.escape(environment) + '\}'
+        
+        endMatch = re.search(endPattern, content[contentInd:])
+        if(not endMatch):
+            raise ValueError('cannot find ending match for pattern: "' + endPattern + '"')
+        
+        begin = contentInd + startMatch.start()
+        end   = contentInd + endMatch.end()
+        if(environment == 'math'):
+            # inline Math
+            yield content[begin : end], begin, end, False
         else:
-            cummulative = 0
-            line = 0
-            for line, string in enumerate(lines):
-                cummulative += len(string) + 1
-                if begin < cummulative: break
-            if lines[line].startswith('   '):
-                cursor = begin + 6
-                continue
-            leftover = content[begin + 6:]
-            if not leftover: break
-            match = re.match(r"\{.+?\}", leftover)
-            if not match:
-                cursor = begin + 6
-                continue
-            end_marker = '\\end' + match.group()
-            end = content.find(end_marker, begin)
-            if end == -1:
-                cursor = begin + 6
-                continue
-            cursor = end + len(end_marker)
-            yield content[begin: cursor], begin, cursor, True
+            # Display Math
+            yield content[begin : end], begin, end, True
+
+        contentInd = contentInd + endMatch.end()
 
 
 def render(
@@ -132,7 +105,7 @@ def render(
         branch = None
     temp_dir = tempfile.mkdtemp('', 'readme2tex-')
 
-    with open(readme) as readme_file:
+    with open(readme, encoding = 'utf-8') as readme_file:
         content = readme_file.read()
     content = content.replace('\r', '')
 
@@ -157,7 +130,7 @@ def render(
                 logging.info("Cannot find %s:%s", branch, svg_path.replace('\\', '/'))
         else:
             if os.path.exists(svg_path):
-                with open(svg_path) as f:
+                with open(svg_path, encoding = 'utf-8') as f:
                     svg = f.read()
 
         try:
@@ -236,7 +209,7 @@ def render(
             for equation, start, end, _ in equations:
                 svg, name, dvi, off = equation_map[(start, end)]
                 if dvi:
-                    with open(os.path.join(svgdir, name + '.svg'), 'w') as file:
+                    with open(os.path.join(svgdir, name + '.svg'), 'w', encoding = 'utf-8') as file:
                         file.write(svg)
                     if pngtrick:
                         svg2png(os.path.join(svgdir, name + '.svg'))
@@ -261,7 +234,7 @@ def render(
                 for equation, start, end, _ in equations:
                     svg, name, dvi, off = equation_map[(start, end)]
                     if dvi:
-                        with open(os.path.join(svgdir, name + '.svg'), 'w') as file:
+                        with open(os.path.join(svgdir, name + '.svg'), 'w', encoding = 'utf-8') as file:
                             file.write(svg)
                         if pngtrick:
                             svg2png(os.path.join(svgdir, name + '.svg'))
@@ -338,7 +311,7 @@ def render(
             height)
         if block: img = '<p align="center">%s</p>' % img
         new = new[:start] + img + new[end:]
-    with open(output, 'w') as outfile:
+    with open(output, 'w', encoding = 'utf-8') as outfile:
         outfile.write(new)
 
     if htmlize:
@@ -347,5 +320,5 @@ def render(
         except:
             logging.error("Cannot render markdown, make sure that the markdown package is installed.")
             return
-        with open(output+".html", 'w') as outfile:
+        with open(output+".html", 'w', encoding = 'utf-8') as outfile:
             outfile.write(markdown.markdown(new))
