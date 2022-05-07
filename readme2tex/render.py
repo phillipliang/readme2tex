@@ -38,6 +38,29 @@ def rendertex(engine, string, packages, temp_dir, block):
         check_output(
             [engine, '-output-directory=' + temp_dir, '-interaction', 'nonstopmode', source_file],
             stderr=sys.stdout)
+        # compile one more time to address below warning:
+        #     LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
+        #
+        # -----------------------
+        # More background:
+        # -----------------------
+        # LaTeX will calculate the right numbering for the objects in the document; the marker you have used to label the object will not be shown anywhere in the document. Instead, LaTeX will replace the string "\ref{marker}" with the right number that was assigned to the object. If you reference a marker that does not exist, the compilation of the document will be successful but LaTeX will return a warning:
+        # 
+        #     LaTeX Warning: There were undefined references.
+        # 
+        # and it will replace "\ref{unknown-marker}" with "??" — so that it will be easier to find in the document.
+        # 
+        # As you may have noticed, this way of cross-referencing is a two-step process: first the compiler has to store the labels with the right number to be used for referencing, then it has to replace the \ref with the right number.
+        # 
+        # Because of that, you would have to compile your document twice to see the output with the proper numbering. If you only compile it once, then LaTeX will use the older information collected in previous compilations (which might be outdated), and the compiler will inform you by printing the following message at the end of the compilation:
+        # 
+        #     LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
+        #
+        # reference:
+        #     https://en.wikibooks.org/wiki/LaTeX/Labels_and_Cross-referencing#Introduction
+        check_output(
+            [engine, '-output-directory=' + temp_dir, '-interaction', 'nonstopmode', source_file],
+            stderr=sys.stdout)
     except:
         logging.warning("'%s' has warnings during compilation. See %s/%s", string, temp_dir, name)
     dvi = os.path.join(temp_dir, name + '.dvi')
