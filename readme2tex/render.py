@@ -77,20 +77,33 @@ def svg2png(svg):
 
 
 def extract_equations(content):
+
     contentInd = 0
+
     while True:
         if(contentInd >= len(content) - 1):
             break
 
-        # outerStartPattern is 3 parts
-        #   part #1: 3 or more backticks characters, it is a match group
+        # GitHub fenced code block start pattern has 4 parts
+        #   part #1: 3 or more backticks characters, --------------------------- it is a match group
         #   part #2: (optional) 0 or more repetitions of whitespace characters
-        #   part #3: (optional) lauguage string, and it is a match group
+        #   part #3: (optional) lauguage string, ------------------------------- it is a match group
         #   part #4: (optional) 0 or more repetitions of whitespace characters
-        outerStartPattern = r'([`]{3,})[ \t]*(\w+)?[ \t]*'
-        outerStartMatch = re.search(outerStartPattern, content[contentInd:])
-        if(outerStartMatch):
-            # it is inside Github fenced code block
+        githubFencedCodeBlockStartPattern = r'([`]{3,})[ \t]*(\w+)?[ \t]*'
+
+        # LaTeX start pattern has 3 parts
+        #   part #1: \begin{
+        #   part #2: math environment, ----------------------------------------- it is a match group
+        #   part #3: }
+        latexMathEnvStartPattern = r'\\begin\{([\w*]+)\}'
+        startPattern = r'' + githubFencedCodeBlockStartPattern + '|' + latexMathEnvStartPattern
+
+        startMatch = re.search(startPattern, content[contentInd:])
+        if(not startMatch):
+            break
+
+        if(startMatch.group(1)):
+            # '```' is found, it is inside Github fenced code block
 
             # +--------------------------------------------------------------------------- 1st search start index, looking for "``` xxx"
             # |              +------------------------------------------------------------ 2nd search start index, looking for "```"
@@ -105,67 +118,65 @@ def extract_equations(content):
             #     |          |                                               +------------ contentInd + startMatch.end() + endMatch.start()
             #     |          +------------------------------------------------------------ contentInd + startMatch.end()
             #     +----------------------------------------------------------------------- contentInd + startMatch.start()
+            backticksStr = startMatch.group(1)
+            language     = startMatch.group(2)
 
-            # it is inside Github fenced code block
-            backticksStr = outerStartMatch.group(1)
-            language     = outerStartMatch.group(2)
-
-            # match "```", "````", "`````"...
-            outerEndPattern = r'' + backticksStr
-            outerEndMatch = re.search(outerEndPattern, content[contentInd + outerStartMatch.end():])
-            if(not outerEndMatch):            
-                raise ValueError('cannot find ending match for pattern: "' + outerEndPattern + '"')
+            # exactly match "```", "````", "`````"...
+            endPattern = r'' + backticksStr
+            endMatch = re.search(endPattern, content[contentInd + startMatch.end():])
+            if(not endMatch):
+                raise ValueError('cannot find ending match for pattern: "' + endPattern + '"')
 
             if(language and language == "tex"):
                 # language is present, and it is also equal to "tex"
                 # Display Math mode = True
-                yield (content[contentInd + outerStartMatch.end() : contentInd + outerStartMatch.end() + outerEndMatch.start()], 
-                       contentInd + outerStartMatch.start(),
-                       contentInd + outerStartMatch.end() + outerEndMatch.end(),
+                yield (content[contentInd + startMatch.end() : contentInd + startMatch.end() + endMatch.start()], 
+                       contentInd + startMatch.start(),
+                       contentInd + startMatch.end() + endMatch.end(),
                        True)
-            
-            contentInd = contentInd + outerStartMatch.end() + outerEndMatch.end()
+
+            contentInd = contentInd + startMatch.end() + endMatch.end()
 
         else:
-            # it is **NOT** inside Github fenced code block
+            # \begin{xxx} is found, it is LaTeX math environment
 
             # +--------------------------------------------------------------------------- 1st search start index, looking for "\begin{xxx}"
-            # +--------------------------------------------------------------------------- 2nd search start index, looking for "\end{xxx}"
-            # |<--------------------------------------------------------------------->|
-            # |<------------------------------------------------------------>|        |
+            # |              +------------------------------------------------------------ 2nd search start index, looking for "\end{xxx}"
+            # |<------------>|<------------------------------------------------------>|
+            # |<------------>|<--------------------------------------------->|        |
             # |<------------>|                                               |        |
             # |<->|          |                                               |        |
             # |   |StartMatch|                                               |EndMatch|
             # | start       end                                            start     end
             # +---+----------+-----------------------------------------------+--------+
-            #     |          |                                               |        +--- contentInd + endMatch.end()
-            #     |          |                                               +------------ contentInd + endMatch.start()
+            #     |          |                                               |        +--- contentInd + startMatch.end() + endMatch.end()
+            #     |          |                                               +------------ contentInd + startMatch.end() + endMatch.start()
             #     |          +------------------------------------------------------------ contentInd + startMatch.end()
             #     +----------------------------------------------------------------------- contentInd + startMatch.start()
-            innerStartPattern = r'\\begin\{([\w*]+)\}'
-            innerStartMatch = re.search(innerStartPattern, content[contentInd:])
-            if(not innerStartMatch):
-                break
-            
-            environment = innerStartMatch.group(1)
+            mathEnv = startMatch.group(3)
 
-            innerEndPattern = r'\\end\{' + re.escape(environment) + '\}'
+            endPattern = r'\\end\{' + re.escape(mathEnv) + '\}'
             
-            innerEndMatch = re.search(innerEndPattern, content[contentInd:])
-            if(not innerEndMatch):
-                raise ValueError('cannot find ending match for pattern: "' + innerEndPattern + '"')
+            endMatch = re.search(endPattern, content[contentInd + startMatch.end():])
+            if(not endMatch):
+                raise ValueError('cannot find ending match for pattern: "' + endPattern + '"')
             
-            begin = contentInd + innerStartMatch.start()
-            end   = contentInd + innerEndMatch.end()
-            if(environment == 'math'):
+            if(mathEnv == 'math'):
+                # it is Inline Math mode
                 # Display Math mode = False
-                # it is inline Math mode
-                yield content[begin : end], begin, end, False
+                yield (content[contentInd + startMatch.start() : contentInd + startMatch.end() + endMatch.end()], 
+                       contentInd + startMatch.start(),
+                       contentInd + startMatch.end() + endMatch.end(),
+                       False)
             else:
                 # Display Math mode = True
-                yield content[begin : end], begin, end, True
+                yield (content[contentInd + startMatch.start() : contentInd + startMatch.end() + endMatch.end()], 
+                       contentInd + startMatch.start(),
+                       contentInd + startMatch.end() + endMatch.end(),
+                       True)
 
-            contentInd = contentInd + innerEndMatch.end()
+            contentInd = contentInd + startMatch.end() + endMatch.end()
+
 
 
 def render(
