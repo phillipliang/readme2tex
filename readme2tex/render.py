@@ -16,6 +16,7 @@ envelope = r'''%% processed with readme2tex
 \usepackage{geometry}
 \pagestyle{empty}
 \geometry{paperwidth=250mm, paperheight=16383pt, left=0pt, top=0pt, textwidth=426pt, marginparsep=20pt, marginparwidth=100pt, textheight=16263pt, footskip=40pt}
+\DeclareMathOperator*{\expect}{\mathbb{E}}
 \begin{document}
 %s%s
 \end{document}
